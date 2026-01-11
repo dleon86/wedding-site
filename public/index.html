@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign the Guestbook</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header style="text-align: center; margin-bottom: 2rem;">
+      <h1>Sign Our Guestbook</h1>
+      <p class="subtitle">Leave us a message and share in our special day</p>
+    </header>
+
+    <div id="message-container"></div>
+
+    <form id="guestbook-form" class="guestbook-form">
+      <div class="form-group">
+        <label for="name">Your Name</label>
+        <input 
+          type="text" 
+          id="name" 
+          name="name" 
+          maxlength="120" 
+          placeholder="Enter your name"
+          required
+        >
+        <div class="char-count"><span id="name-count">0</span>/120</div>
+      </div>
+
+      <div class="form-group">
+        <label for="note">Your Message</label>
+        <textarea 
+          id="note" 
+          name="note" 
+          placeholder="Write your wishes, memories, or advice for the happy couple..."
+          required
+        ></textarea>
+      </div>
+
+      <div class="form-group checkbox-group">
+        <label class="checkbox-label">
+          <input type="checkbox" id="private-message" name="private">
+          <span class="checkbox-text">Keep this message private (only visible to the couple)</span>
+        </label>
+      </div>
+
+      <div class="form-group">
+        <span class="form-label">Photo (Optional)</span>
+        <div class="photo-capture-wrapper" id="photo-capture-wrapper">
+          <!-- Webcam capture area -->
+          <div id="webcam-container" style="display: none;">
+            <video id="webcam-video" autoplay playsinline></video>
+            <div class="webcam-controls">
+              <button type="button" class="btn btn-primary" id="capture-btn">📸 Take Photo</button>
+              <button type="button" class="btn btn-secondary" id="cancel-webcam-btn">Cancel</button>
+            </div>
+          </div>
+          
+          <!-- Photo preview -->
+          <div id="photo-preview-container" style="display: none;">
+            <img id="photo-preview" alt="Your photo">
+            <div class="photo-preview-controls">
+              <button type="button" class="btn btn-secondary" id="retake-btn">🔄 Retake</button>
+              <button type="button" class="btn btn-danger btn-small" id="remove-photo-btn">✕ Remove</button>
+            </div>
+          </div>
+          
+          <!-- Initial buttons -->
+          <div id="photo-buttons">
+            <button type="button" class="btn btn-secondary" id="start-webcam-btn">
+              📷 Take a Selfie
+            </button>
+            <span class="photo-or">or</span>
+            <div class="drop-zone" id="drop-zone">
+              <div class="drop-zone-text">📁 Drag photo here</div>
+              <input type="file" id="photos" name="photos" accept="image/*" class="file-input-styled">
+            </div>
+          </div>
+          <canvas id="photo-canvas" style="display: none;"></canvas>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary" id="submit-btn">
+        Sign the Guestbook
+      </button>
+    </form>
+
+    <div style="text-align: center; margin-top: 2rem;">
+      <a href="/display" class="btn btn-secondary">View All Messages</a>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('guestbook-form');
+    const nameInput = document.getElementById('name');
+    const nameCount = document.getElementById('name-count');
+    const photosInput = document.getElementById('photos');
+    const messageContainer = document.getElementById('message-container');
+    const submitBtn = document.getElementById('submit-btn');
+
+    let selectedFiles = [];
+
+    // Character count for name
+    nameInput.addEventListener('input', () => {
+      nameCount.textContent = nameInput.value.length;
+    });
+
+    // Photo capture elements
+    const webcamContainer = document.getElementById('webcam-container');
+    const webcamVideo = document.getElementById('webcam-video');
+    const photoCanvas = document.getElementById('photo-canvas');
+    const photoPreviewContainer = document.getElementById('photo-preview-container');
+    const photoPreview = document.getElementById('photo-preview');
+    const photoButtons = document.getElementById('photo-buttons');
+    const startWebcamBtn = document.getElementById('start-webcam-btn');
+    const captureBtn = document.getElementById('capture-btn');
+    const cancelWebcamBtn = document.getElementById('cancel-webcam-btn');
+    const retakeBtn = document.getElementById('retake-btn');
+    const removePhotoBtn = document.getElementById('remove-photo-btn');
+    
+    let mediaStream = null;
+    let capturedPhotoBlob = null;
+
+    // Start webcam
+    startWebcamBtn.addEventListener('click', async () => {
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: false 
+        });
+        webcamVideo.srcObject = mediaStream;
+        photoButtons.style.display = 'none';
+        webcamContainer.style.display = 'block';
+      } catch (err) {
+        alert('Could not access webcam. Please check permissions or use the upload option.');
+        console.error('Webcam error:', err);
+      }
+    });
+
+    // Capture photo from webcam
+    captureBtn.addEventListener('click', () => {
+      photoCanvas.width = webcamVideo.videoWidth;
+      photoCanvas.height = webcamVideo.videoHeight;
+      const ctx = photoCanvas.getContext('2d');
+      ctx.drawImage(webcamVideo, 0, 0);
+      
+      photoCanvas.toBlob((blob) => {
+        capturedPhotoBlob = blob;
+        photoPreview.src = URL.createObjectURL(blob);
+        stopWebcam();
+        webcamContainer.style.display = 'none';
+        photoPreviewContainer.style.display = 'block';
+      }, 'image/jpeg', 0.85);
+    });
+
+    // Cancel webcam
+    cancelWebcamBtn.addEventListener('click', () => {
+      stopWebcam();
+      webcamContainer.style.display = 'none';
+      photoButtons.style.display = 'flex';
+    });
+
+    // Retake photo
+    retakeBtn.addEventListener('click', async () => {
+      capturedPhotoBlob = null;
+      photoPreviewContainer.style.display = 'none';
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: false 
+        });
+        webcamVideo.srcObject = mediaStream;
+        webcamContainer.style.display = 'block';
+      } catch (err) {
+        photoButtons.style.display = 'flex';
+        alert('Could not access webcam.');
+      }
+    });
+
+    // Remove photo
+    removePhotoBtn.addEventListener('click', () => {
+      capturedPhotoBlob = null;
+      selectedFiles = [];
+      photoPreviewContainer.style.display = 'none';
+      photoButtons.style.display = 'flex';
+    });
+
+    // Drop zone for drag and drop
+    const dropZone = document.getElementById('drop-zone');
+    
+    // Prevent browser from opening dropped files
+    document.addEventListener('dragover', (e) => e.preventDefault());
+    document.addEventListener('drop', (e) => e.preventDefault());
+    
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('drag-over');
+    });
+    
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('drag-over');
+    });
+    
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      const files = e.dataTransfer.files;
+      if (files.length > 0 && files[0].type.startsWith('image/')) {
+        handleDroppedFile(files[0]);
+      }
+    });
+    
+    function handleDroppedFile(file) {
+      if (file.size <= 25 * 1024 * 1024) {
+        selectedFiles = [file];
+        capturedPhotoBlob = null;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          photoPreview.src = ev.target.result;
+          photoButtons.style.display = 'none';
+          photoPreviewContainer.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+      } else {
+        alert('File too large. Maximum size is 25MB.');
+      }
+    }
+
+    // File upload (as backup)
+    photosInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        const file = e.target.files[0];
+        if (file.type.startsWith('image/') && file.size <= 25 * 1024 * 1024) {
+          selectedFiles = [file];
+          capturedPhotoBlob = null;
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            photoPreview.src = ev.target.result;
+            photoButtons.style.display = 'none';
+            photoPreviewContainer.style.display = 'block';
+          };
+          reader.readAsDataURL(file);
+        }
+      }
+    });
+
+    function stopWebcam() {
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+        mediaStream = null;
+      }
+    }
+
+    // Form submission
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting...';
+      
+      const formData = new FormData();
+      formData.append('name', nameInput.value.trim());
+      formData.append('note', document.getElementById('note').value.trim());
+      formData.append('private', document.getElementById('private-message').checked);
+      
+      // Add webcam photo or uploaded file
+      if (capturedPhotoBlob) {
+        formData.append('photos', capturedPhotoBlob, 'webcam-photo.jpg');
+      } else if (selectedFiles.length > 0) {
+        formData.append('photos', selectedFiles[0]);
+      } else if (photosInput.files && photosInput.files.length > 0) {
+        // Fallback: grab directly from the file input
+        formData.append('photos', photosInput.files[0]);
+      }
+      
+      // Stop webcam if still running
+      stopWebcam();
+      
+      try {
+        const response = await fetch('/api/entries', {
+          method: 'POST',
+          body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+          showMessage('success', data.message);
+          form.reset();
+          selectedFiles = [];
+          capturedPhotoBlob = null;
+          photoPreviewContainer.style.display = 'none';
+          photoButtons.style.display = 'flex';
+          nameCount.textContent = '0';
+        } else {
+          showMessage('error', data.error || 'Something went wrong');
+        }
+      } catch (error) {
+        showMessage('error', 'Failed to submit. Please try again.');
+      }
+      
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Sign the Guestbook';
+    });
+
+    function showMessage(type, text) {
+      messageContainer.innerHTML = `<div class="message message-${type}">${text}</div>`;
+      messageContainer.scrollIntoView({ behavior: 'smooth' });
+    }
+  </script>
+</body>
+</html>

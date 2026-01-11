@@ -1,0 +1,8 @@
+node_modules/
+.env
+env-setup.txt
+*.log
+
+# Reference files
+2026.01.24 - Ace and Danny — Married Livestream_files/
+2026.01.24 - Ace and Danny — Married Livestream.html

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Guestbook Messages</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header style="text-align: center; margin-bottom: 2rem;">
+      <h1>Guestbook Messages</h1>
+      <p class="subtitle">Wishes and memories from our loved ones</p>
+    </header>
+
+    <div id="entries-container">
+      <div class="loading">
+        <div class="spinner"></div>
+        <p>Loading messages...</p>
+      </div>
+    </div>
+
+    <div style="text-align: center; margin-top: 3rem;">
+      <a href="/" class="btn btn-primary">Sign the Guestbook</a>
+    </div>
+  </div>
+
+  <!-- Lightbox for photos -->
+  <div class="lightbox" id="lightbox" style="display: none;">
+    <span class="lightbox-close">&times;</span>
+    <img src="" alt="Photo" id="lightbox-img">
+  </div>
+
+  <script>
+    const entriesContainer = document.getElementById('entries-container');
+    const lightbox = document.getElementById('lightbox');
+    const lightboxImg = document.getElementById('lightbox-img');
+
+    async function loadEntries() {
+      try {
+        const response = await fetch('/api/entries');
+        const entries = await response.json();
+        
+        if (entries.length === 0) {
+          entriesContainer.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-icon">📝</div>
+              <h3>No messages yet</h3>
+              <p>Be the first to sign the guestbook!</p>
+            </div>
+          `;
+          return;
+        }
+        
+        entriesContainer.innerHTML = '<div class="entries-list">' + 
+          entries.map(entry => renderEntry(entry)).join('') +
+          '</div>';
+          
+      } catch (error) {
+        entriesContainer.innerHTML = `
+          <div class="message message-error">
+            Failed to load messages. Please refresh the page.
+          </div>
+        `;
+      }
+    }
+
+    function renderEntry(entry) {
+      const date = new Date(entry.created_at).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+      
+      const photosHtml = entry.photos && entry.photos.length > 0 
+        ? `<div class="entry-photos">
+            ${entry.photos.map(photo => 
+              `<img src="${photo}" alt="Photo" class="entry-photo" onclick="openLightbox('${photo}')">`
+            ).join('')}
+           </div>`
+        : '';
+      
+      return `
+        <article class="entry-card">
+          <header class="entry-header">
+            <h3 class="entry-name">${escapeHtml(entry.name)}</h3>
+            <span class="entry-date">${date}</span>
+          </header>
+          <p class="entry-note">${escapeHtml(entry.note)}</p>
+          ${photosHtml}
+        </article>
+      `;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function openLightbox(src) {
+      lightboxImg.src = src;
+      lightbox.style.display = 'flex';
+    }
+
+    lightbox.addEventListener('click', () => {
+      lightbox.style.display = 'none';
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        lightbox.style.display = 'none';
+      }
+    });
+
+    loadEntries();
+  </script>
+</body>
+</html>

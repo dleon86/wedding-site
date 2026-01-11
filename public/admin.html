@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Guestbook Admin</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container" style="max-width: 900px;">
+    
+    <!-- Login Form -->
+    <div id="login-section">
+      <div class="login-form">
+        <h2 style="text-align: center;">Admin Login</h2>
+        <div id="login-message"></div>
+        <form id="login-form" class="guestbook-form">
+          <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" required>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width: 100%;">Login</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Admin Panel (hidden until logged in) -->
+    <div id="admin-section" style="display: none;">
+      <div class="admin-header">
+        <h1>Guestbook Management</h1>
+        <button class="btn btn-secondary btn-small" onclick="logout()">Logout</button>
+      </div>
+
+      <div style="margin-bottom: 1.5rem;">
+        <button class="btn btn-secondary btn-small filter-btn active" data-filter="all">All</button>
+        <button class="btn btn-secondary btn-small filter-btn" data-filter="pending">Private</button>
+        <button class="btn btn-secondary btn-small filter-btn" data-filter="approved">Approved</button>
+      </div>
+
+      <div id="admin-message"></div>
+      <div id="entries-container">
+        <div class="loading">
+          <div class="spinner"></div>
+          <p>Loading entries...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lightbox for photos -->
+  <div class="lightbox" id="lightbox" style="display: none;">
+    <span class="lightbox-close">&times;</span>
+    <img src="" alt="Photo" id="lightbox-img">
+  </div>
+
+  <script>
+    let adminPassword = '';
+    let allEntries = [];
+    let currentFilter = 'all';
+    
+    const loginSection = document.getElementById('login-section');
+    const adminSection = document.getElementById('admin-section');
+    const entriesContainer = document.getElementById('entries-container');
+    const loginForm = document.getElementById('login-form');
+    const loginMessage = document.getElementById('login-message');
+    const adminMessage = document.getElementById('admin-message');
+    const lightbox = document.getElementById('lightbox');
+    const lightboxImg = document.getElementById('lightbox-img');
+
+    // Check for saved password
+    const savedPassword = sessionStorage.getItem('guestbook_admin');
+    if (savedPassword) {
+      adminPassword = savedPassword;
+      showAdmin();
+    }
+
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const password = document.getElementById('password').value;
+      
+      try {
+        const response = await fetch('/api/admin/entries', {
+          headers: { 'X-Admin-Password': password }
+        });
+        
+        if (response.ok) {
+          adminPassword = password;
+          sessionStorage.setItem('guestbook_admin', password);
+          showAdmin();
+        } else {
+          loginMessage.innerHTML = '<div class="message message-error">Invalid password</div>';
+        }
+      } catch (error) {
+        loginMessage.innerHTML = '<div class="message message-error">Login failed</div>';
+      }
+    });
+
+    function showAdmin() {
+      loginSection.style.display = 'none';
+      adminSection.style.display = 'block';
+      loadEntries();
+    }
+
+    function logout() {
+      adminPassword = '';
+      sessionStorage.removeItem('guestbook_admin');
+      loginSection.style.display = 'block';
+      adminSection.style.display = 'none';
+      document.getElementById('password').value = '';
+    }
+
+    async function loadEntries() {
+      try {
+        const response = await fetch('/api/admin/entries', {
+          headers: { 'X-Admin-Password': adminPassword }
+        });
+        
+        if (response.status === 401) {
+          logout();
+          return;
+        }
+        
+        allEntries = await response.json();
+        renderEntries();
+      } catch (error) {
+        entriesContainer.innerHTML = `
+          <div class="message message-error">Failed to load entries</div>
+        `;
+      }
+    }
+
+    function renderEntries() {
+      let filtered = allEntries;
+      if (currentFilter === 'pending') {
+        filtered = allEntries.filter(e => !e.approved);
+      } else if (currentFilter === 'approved') {
+        filtered = allEntries.filter(e => e.approved);
+      }
+      
+      if (filtered.length === 0) {
+        entriesContainer.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">📋</div>
+            <h3>No entries found</h3>
+          </div>
+        `;
+        return;
+      }
+      
+      entriesContainer.innerHTML = '<div class="entries-list">' + 
+        filtered.map(entry => renderEntry(entry)).join('') +
+        '</div>';
+    }
+
+    function renderEntry(entry) {
+      const date = new Date(entry.created_at).toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      
+      const statusClass = entry.approved ? 'status-approved' : 'status-private';
+      const statusText = entry.approved ? 'Public' : '🔒 Private';
+      
+      const photosHtml = entry.photos && entry.photos.length > 0 
+        ? `<div class="entry-photos">
+            ${entry.photos.map(photo => 
+              `<img src="${photo}" alt="Photo" class="entry-photo" onclick="openLightbox('${photo}')">`
+            ).join('')}
+           </div>`
+        : '';
+      
+      const approveBtn = entry.approved 
+        ? `<button class="btn btn-secondary btn-small" onclick="updateEntry(${entry.id}, false)">Make Private</button>`
+        : `<button class="btn btn-success btn-small" onclick="updateEntry(${entry.id}, true)">Make Public</button>`;
+      
+      return `
+        <article class="entry-card">
+          <header class="entry-header">
+            <div>
+              <h3 class="entry-name">${escapeHtml(entry.name)}</h3>
+              <span class="entry-status ${statusClass}">${statusText}</span>
+            </div>
+            <span class="entry-date">${date}</span>
+          </header>
+          <p class="entry-note">${escapeHtml(entry.note)}</p>
+          ${photosHtml}
+          <div class="entry-actions">
+            ${approveBtn}
+            <button class="btn btn-danger btn-small" onclick="deleteEntry(${entry.id})">Delete</button>
+          </div>
+        </article>
+      `;
+    }
+
+    async function updateEntry(id, approved) {
+      try {
+        const response = await fetch(`/api/admin/entries/${id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Admin-Password': adminPassword
+          },
+          body: JSON.stringify({ approved })
+        });
+        
+        if (response.ok) {
+          showAdminMessage('success', approved ? 'Entry approved!' : 'Entry unapproved');
+          loadEntries();
+        } else {
+          showAdminMessage('error', 'Failed to update entry');
+        }
+      } catch (error) {
+        showAdminMessage('error', 'Failed to update entry');
+      }
+    }
+
+    async function deleteEntry(id) {
+      if (!confirm('Are you sure you want to delete this entry?')) return;
+      
+      try {
+        const response = await fetch(`/api/admin/entries/${id}`, {
+          method: 'DELETE',
+          headers: { 'X-Admin-Password': adminPassword }
+        });
+        
+        if (response.ok) {
+          showAdminMessage('success', 'Entry deleted');
+          loadEntries();
+        } else {
+          showAdminMessage('error', 'Failed to delete entry');
+        }
+      } catch (error) {
+        showAdminMessage('error', 'Failed to delete entry');
+      }
+    }
+
+    function showAdminMessage(type, text) {
+      adminMessage.innerHTML = `<div class="message message-${type}">${text}</div>`;
+      setTimeout(() => {
+        adminMessage.innerHTML = '';
+      }, 3000);
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function openLightbox(src) {
+      lightboxImg.src = src;
+      lightbox.style.display = 'flex';
+    }
+
+    lightbox.addEventListener('click', () => {
+      lightbox.style.display = 'none';
+    });
+
+    // Filter buttons
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentFilter = btn.dataset.filter;
+        renderEntries();
+      });
+    });
+  </script>
+
+  <style>
+    .filter-btn.active {
+      background: var(--color-accent);
+      color: white;
+      border-color: var(--color-accent);
+    }
+  </style>
+</body>
+</html>
