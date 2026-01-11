@@ -14,6 +14,17 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+// Validate Cloudinary config on startup
+const cloudinaryConfigured = !!(
+  process.env.CLOUDINARY_CLOUD_NAME && 
+  process.env.CLOUDINARY_API_KEY && 
+  process.env.CLOUDINARY_API_SECRET
+);
+console.log('Cloudinary configured:', cloudinaryConfigured);
+if (!cloudinaryConfigured) {
+  console.warn('⚠️  Cloudinary credentials missing - photo uploads will fail!');
+}
+
 // Use memory storage, then upload to Cloudinary
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -81,13 +92,20 @@ app.post('/api/entries', handleUpload, async (req, res) => {
     // Upload photos to Cloudinary
     const photos = [];
     if (req.files && req.files.length > 0) {
-      for (const file of req.files) {
-        try {
-          const url = await uploadToCloudinary(file.buffer, file.mimetype);
-          photos.push(url);
-        } catch (uploadError) {
-          console.error('Photo upload failed:', uploadError);
-          // Continue with other photos if one fails
+      console.log(`Processing ${req.files.length} file(s) for upload...`);
+      
+      if (!cloudinaryConfigured) {
+        console.error('Cannot upload photos - Cloudinary not configured!');
+      } else {
+        for (const file of req.files) {
+          try {
+            console.log(`Uploading ${file.originalname} (${file.size} bytes)...`);
+            const url = await uploadToCloudinary(file.buffer, file.mimetype);
+            console.log(`Upload success: ${url}`);
+            photos.push(url);
+          } catch (uploadError) {
+            console.error('Photo upload failed:', uploadError.message || uploadError);
+          }
         }
       }
     }
