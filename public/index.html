@@ -133,9 +133,21 @@
         webcamVideo.srcObject = mediaStream;
         photoButtons.style.display = 'none';
         webcamContainer.style.display = 'block';
+        // Auto-scroll to show the webcam container
+        setTimeout(() => {
+          webcamContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
       } catch (err) {
         alert('Could not access webcam. Please check permissions or use the upload option.');
         console.error('Webcam error:', err);
+      }
+    });
+
+    // Spacebar hotkey to capture photo when webcam is active
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && mediaStream && webcamContainer.style.display !== 'none') {
+        e.preventDefault();
+        captureBtn.click();
       }
     });
 
@@ -173,6 +185,9 @@
         });
         webcamVideo.srcObject = mediaStream;
         webcamContainer.style.display = 'block';
+        setTimeout(() => {
+          webcamContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
       } catch (err) {
         photoButtons.style.display = 'flex';
         alert('Could not access webcam.');
