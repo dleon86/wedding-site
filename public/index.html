@@ -47,7 +47,11 @@
       </div>
 
       <div class="form-group">
-        <span class="form-label">Photo (Optional)</span>
+        <span class="form-label">Photos (Optional - up to 5)</span>
+        
+        <!-- Selected photos thumbnails -->
+        <div id="photo-thumbnails" class="photo-thumbnails"></div>
+        
         <div class="photo-capture-wrapper" id="photo-capture-wrapper">
           <!-- Webcam capture area -->
           <div id="webcam-container" style="display: none;">
@@ -58,16 +62,7 @@
             </div>
           </div>
           
-          <!-- Photo preview -->
-          <div id="photo-preview-container" style="display: none;">
-            <img id="photo-preview" alt="Your photo">
-            <div class="photo-preview-controls">
-              <button type="button" class="btn btn-secondary" id="retake-btn">🔄 Retake</button>
-              <button type="button" class="btn btn-danger btn-small" id="remove-photo-btn">✕ Remove</button>
-            </div>
-          </div>
-          
-          <!-- Initial buttons -->
+          <!-- Add photo buttons -->
           <div id="photo-buttons">
             <button type="button" class="btn btn-secondary" id="start-webcam-btn">
               📷 Take a Selfie
@@ -75,11 +70,12 @@
             <span class="photo-or">or</span>
             <div class="drop-zone" id="drop-zone">
               <div class="drop-zone-text">📁 Drag photo here</div>
-              <input type="file" id="photos" name="photos" accept="image/*" class="file-input-styled">
+              <input type="file" id="photos" name="photos" accept="image/*" multiple class="file-input-styled">
             </div>
           </div>
           <canvas id="photo-canvas" style="display: none;"></canvas>
         </div>
+        <div class="photo-count" id="photo-count">0/5 photos</div>
       </div>
 
       <button type="submit" class="btn btn-primary" id="submit-btn">
@@ -111,17 +107,61 @@
     const webcamContainer = document.getElementById('webcam-container');
     const webcamVideo = document.getElementById('webcam-video');
     const photoCanvas = document.getElementById('photo-canvas');
-    const photoPreviewContainer = document.getElementById('photo-preview-container');
-    const photoPreview = document.getElementById('photo-preview');
     const photoButtons = document.getElementById('photo-buttons');
+    const photoThumbnails = document.getElementById('photo-thumbnails');
+    const photoCount = document.getElementById('photo-count');
     const startWebcamBtn = document.getElementById('start-webcam-btn');
     const captureBtn = document.getElementById('capture-btn');
     const cancelWebcamBtn = document.getElementById('cancel-webcam-btn');
-    const retakeBtn = document.getElementById('retake-btn');
-    const removePhotoBtn = document.getElementById('remove-photo-btn');
     
     let mediaStream = null;
-    let capturedPhotoBlob = null;
+    let selectedPhotos = []; // Array to hold {type: 'blob'|'file', data: Blob|File, preview: string}
+    const MAX_PHOTOS = 5;
+
+    // Update photo count and toggle buttons
+    function updatePhotoUI() {
+      photoCount.textContent = `${selectedPhotos.length}/${MAX_PHOTOS} photos`;
+      
+      // Hide add buttons if we have max photos
+      if (selectedPhotos.length >= MAX_PHOTOS) {
+        photoButtons.style.display = 'none';
+      } else {
+        photoButtons.style.display = 'flex';
+      }
+      
+      // Render thumbnails
+      photoThumbnails.innerHTML = '';
+      selectedPhotos.forEach((photo, index) => {
+        const thumbnail = document.createElement('div');
+        thumbnail.className = 'photo-thumbnail';
+        thumbnail.innerHTML = `
+          <img src="${photo.preview}" alt="Photo ${index + 1}">
+          <button type="button" class="thumbnail-remove" onclick="removePhoto(${index})">✕</button>
+        `;
+        photoThumbnails.appendChild(thumbnail);
+      });
+    }
+
+    // Add photo to array
+    function addPhoto(data, type = 'file') {
+      if (selectedPhotos.length >= MAX_PHOTOS) {
+        alert(`Maximum ${MAX_PHOTOS} photos allowed`);
+        return;
+      }
+      
+      const preview = type === 'blob' ? URL.createObjectURL(data) : URL.createObjectURL(data);
+      selectedPhotos.push({ type, data, preview });
+      updatePhotoUI();
+    }
+
+    // Remove photo from array
+    window.removePhoto = function(index) {
+      if (selectedPhotos[index]) {
+        URL.revokeObjectURL(selectedPhotos[index].preview);
+        selectedPhotos.splice(index, 1);
+        updatePhotoUI();
+      }
+    };
 
     // Start webcam
     startWebcamBtn.addEventListener('click', async () => {
@@ -153,17 +193,22 @@
 
     // Capture photo from webcam
     captureBtn.addEventListener('click', () => {
+      if (selectedPhotos.length >= MAX_PHOTOS) {
+        alert(`Maximum ${MAX_PHOTOS} photos allowed`);
+        stopWebcam();
+        webcamContainer.style.display = 'none';
+        return;
+      }
+      
       photoCanvas.width = webcamVideo.videoWidth;
       photoCanvas.height = webcamVideo.videoHeight;
       const ctx = photoCanvas.getContext('2d');
       ctx.drawImage(webcamVideo, 0, 0);
       
       photoCanvas.toBlob((blob) => {
-        capturedPhotoBlob = blob;
-        photoPreview.src = URL.createObjectURL(blob);
+        addPhoto(blob, 'blob');
         stopWebcam();
         webcamContainer.style.display = 'none';
-        photoPreviewContainer.style.display = 'block';
       }, 'image/jpeg', 0.85);
     });
 
@@ -171,35 +216,6 @@
     cancelWebcamBtn.addEventListener('click', () => {
       stopWebcam();
       webcamContainer.style.display = 'none';
-      photoButtons.style.display = 'flex';
-    });
-
-    // Retake photo
-    retakeBtn.addEventListener('click', async () => {
-      capturedPhotoBlob = null;
-      photoPreviewContainer.style.display = 'none';
-      try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-          audio: false 
-        });
-        webcamVideo.srcObject = mediaStream;
-        webcamContainer.style.display = 'block';
-        setTimeout(() => {
-          webcamContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 100);
-      } catch (err) {
-        photoButtons.style.display = 'flex';
-        alert('Could not access webcam.');
-      }
-    });
-
-    // Remove photo
-    removePhotoBtn.addEventListener('click', () => {
-      capturedPhotoBlob = null;
-      selectedFiles = [];
-      photoPreviewContainer.style.display = 'none';
-      photoButtons.style.display = 'flex';
     });
 
     // Drop zone for drag and drop
@@ -221,45 +237,42 @@
     dropZone.addEventListener('drop', (e) => {
       e.preventDefault();
       dropZone.classList.remove('drag-over');
-      const files = e.dataTransfer.files;
-      if (files.length > 0 && files[0].type.startsWith('image/')) {
-        handleDroppedFile(files[0]);
-      }
+      handleFiles(e.dataTransfer.files);
     });
     
-    function handleDroppedFile(file) {
-      if (file.size <= 25 * 1024 * 1024) {
-        selectedFiles = [file];
-        capturedPhotoBlob = null;
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          photoPreview.src = ev.target.result;
-          photoButtons.style.display = 'none';
-          photoPreviewContainer.style.display = 'block';
-        };
-        reader.readAsDataURL(file);
-      } else {
-        alert('File too large. Maximum size is 25MB.');
-      }
-    }
-
-    // File upload (as backup)
+    // File upload
     photosInput.addEventListener('change', (e) => {
-      if (e.target.files.length > 0) {
-        const file = e.target.files[0];
-        if (file.type.startsWith('image/') && file.size <= 25 * 1024 * 1024) {
-          selectedFiles = [file];
-          capturedPhotoBlob = null;
-          const reader = new FileReader();
-          reader.onload = (ev) => {
-            photoPreview.src = ev.target.result;
-            photoButtons.style.display = 'none';
-            photoPreviewContainer.style.display = 'block';
-          };
-          reader.readAsDataURL(file);
+      handleFiles(e.target.files);
+      // Clear the input so the same file can be selected again
+      photosInput.value = '';
+    });
+    
+    function handleFiles(files) {
+      const remaining = MAX_PHOTOS - selectedPhotos.length;
+      if (remaining === 0) {
+        alert(`Maximum ${MAX_PHOTOS} photos already selected`);
+        return;
+      }
+      
+      let added = 0;
+      for (let i = 0; i < files.length && added < remaining; i++) {
+        const file = files[i];
+        if (file.type.startsWith('image/')) {
+          if (file.size <= 25 * 1024 * 1024) {
+            addPhoto(file, 'file');
+            added++;
+          } else {
+            alert(`${file.name} is too large. Maximum size is 25MB.`);
+          }
+        } else {
+          alert(`${file.name} is not an image file.`);
         }
       }
-    });
+      
+      if (added > 0 && files.length > remaining) {
+        alert(`Only ${added} photo(s) added. Maximum ${MAX_PHOTOS} total.`);
+      }
+    }
 
     function stopWebcam() {
       if (mediaStream) {
@@ -280,15 +293,14 @@
       formData.append('note', document.getElementById('note').value.trim());
       formData.append('private', document.getElementById('private-message').checked);
       
-      // Add webcam photo or uploaded file
-      if (capturedPhotoBlob) {
-        formData.append('photos', capturedPhotoBlob, 'webcam-photo.jpg');
-      } else if (selectedFiles.length > 0) {
-        formData.append('photos', selectedFiles[0]);
-      } else if (photosInput.files && photosInput.files.length > 0) {
-        // Fallback: grab directly from the file input
-        formData.append('photos', photosInput.files[0]);
-      }
+      // Add all selected photos
+      selectedPhotos.forEach((photo, index) => {
+        if (photo.type === 'blob') {
+          formData.append('photos', photo.data, `photo-${index + 1}.jpg`);
+        } else {
+          formData.append('photos', photo.data);
+        }
+      });
       
       // Stop webcam if still running
       stopWebcam();
@@ -304,10 +316,10 @@
         if (response.ok) {
           showMessage('success', data.message);
           form.reset();
-          selectedFiles = [];
-          capturedPhotoBlob = null;
-          photoPreviewContainer.style.display = 'none';
-          photoButtons.style.display = 'flex';
+          // Clear all photos
+          selectedPhotos.forEach(photo => URL.revokeObjectURL(photo.preview));
+          selectedPhotos = [];
+          updatePhotoUI();
           nameCount.textContent = '0';
         } else {
           showMessage('error', data.error || 'Something went wrong');
